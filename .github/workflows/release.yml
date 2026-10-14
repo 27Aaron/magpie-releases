@@ -373,6 +373,10 @@ jobs:
               -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
               -d "$(jq -n --arg prompt "$PROMPT" '{"model": "deepseek-v4-pro", "messages": [{"role": "user", "content": $prompt}]}')")
             CHANGELOG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null)
+            # a refusal (a spent balance, a retired model) is said, not
+            # silently turned into the commit list (10-13 to 10-14: no
+            # notes and no Chinese for four releases, yetone/magpie#2122)
+            [ -n "$CHANGELOG" ] || echo "::warning::DeepSeek wrote no changelog: $(echo "$RESPONSE" | jq -c '.error // .' 2>/dev/null | head -c 500)"
           fi
           if [ -z "$CHANGELOG" ]; then
             CHANGELOG=$(printf '### Changes\n\n'; echo "${COMMITS:-Various improvements and bug fixes}" | sed 's/^/- /')
@@ -405,6 +409,7 @@ jobs:
               -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
               -d "$(jq -n --arg prompt "$ZPROMPT" '{"model": "deepseek-v4-pro", "messages": [{"role": "user", "content": $prompt}]}')") || true
             ZH=$(echo "$ZRESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null) || ZH=""
+            [ -n "$ZH" ] || echo "::warning::DeepSeek wrote no Chinese notes: $(echo "$ZRESPONSE" | jq -c '.error // .' 2>/dev/null | head -c 500)"
           fi
           if [ -n "$ZH" ]; then
             {
