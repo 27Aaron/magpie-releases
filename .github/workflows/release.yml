@@ -490,3 +490,41 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: update homebrew tap for v$VERSION"
           git push
+
+      # The Nix packages build from the tag's sources, not the release's
+      # assets. update-nix.sh leaves the file alone when a hash does not
+      # build, so a bad release keeps the last good ones. The lock moves
+      # with the release; a nixpkgs tip that does not build falls back to
+      # the pinned one.
+      - name: Install Nix
+        if: startsWith(env.REF, 'v') || startsWith(env.REF, 'refs/tags/v')
+        uses: cachix/install-nix-action@3c6342b75005b9cc7c7d4069c3e9179247c89012 # v31
+        with:
+          github_access_token: ${{ github.token }}
+
+      - name: Update Nix hashes
+        if: startsWith(env.REF, 'v') || startsWith(env.REF, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NIX_SOURCE_REPO: yetone/magpie
+        run: |
+          cd tap
+          if [[ ! -f flake.nix ]]; then
+            echo "This repository has no Nix packages; nothing to update."
+            exit 0
+          fi
+          nix flake update
+          if ! ./scripts/update-nix.sh "$VERSION"; then
+            echo "::warning::the nixpkgs tip does not build; keeping the pinned flake.lock"
+            git checkout -- flake.lock
+            ./scripts/update-nix.sh "$VERSION"
+          fi
+          git add nix/hashes.json flake.lock
+          if git diff --cached --quiet; then
+            echo "The Nix packages are already at v$VERSION."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: update nix packages for v$VERSION"
+          git push
